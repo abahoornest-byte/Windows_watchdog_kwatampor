@@ -1,0 +1,70 @@
+name: Build Windows
+
+on:
+  # Manual trigger from the Actions tab.
+  workflow_dispatch:
+  # Optional: also run on pushes to main so every release-ready commit
+  # produces an artifact. Delete these two lines if you prefer manual-only.
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    name: Build Windows release
+    runs-on: windows-latest
+
+    steps:
+      # 1. Pull the repo contents into the runner's workspace.
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Install Flutter. `channel: stable` is fine for release builds;
+      #    if your pubspec requires a specific version, pin it with
+      #    `flutter-version: '3.24.0'` (or whichever you're on).
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      # 3. Enable Windows desktop. Without this, `flutter build windows`
+      #    returns "Building for Windows is not enabled on this machine."
+      - name: Enable Windows desktop
+        run: flutter config --enable-windows-desktop
+
+      # 4. Show the effective toolchain. Purely diagnostic — will fail
+      #    here if Visual Studio or the Windows SDK is missing, which is
+      #    far easier to debug than a deeper build error.
+      - name: Flutter doctor
+        run: flutter doctor -v
+
+      # 5. Fetch Dart and plugin dependencies.
+      - name: Install dependencies
+        run: flutter pub get
+
+      # 6. Optional but recommended: run your tests before building.
+      #    Delete if you don't have any tests yet.
+      - name: Run tests
+        run: flutter test --no-pub
+
+      # 7. Build the Windows release binary. Output goes to
+      #    build\windows\x64\runner\Release\
+      - name: Build Windows release
+        run: flutter build windows --release
+
+      # 8. Inspect what was produced. If the build "succeeded" but the
+      #    artifact is missing files, this log will show it.
+      - name: List build output
+        run: dir build\windows\x64\runner\Release
+        shell: cmd
+
+      # 9. Upload the entire Release folder as a downloadable zip.
+      #    Do NOT use a narrower path — the .exe alone won't run without
+      #    the DLLs and data/ folder beside it.
+      - name: Upload Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: build\windows\x64\runner\Release\
+          if-no-files-found: error
+          retention-days: 30
